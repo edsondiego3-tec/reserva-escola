@@ -9,21 +9,16 @@ import base64
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Reserva CMJP", page_icon="🏫", layout="wide")
 
-# --- FUNÇÃO PARA GERAR A MARCA D'ÁGUA ---
-def set_background(image_file):
+# --- FUNÇÃO NOVA: MARCA D'ÁGUA SUTIL ---
+def set_background_sutil(image_file):
     with open(image_file, "rb") as f:
         img_data = f.read()
     b64_encoded = base64.b64encode(img_data).decode()
+    
+    # CSS Modificado: Usa um pseudo-elemento com OPACIDADE baixa
     style = f"""
         <style>
-        .stApp {{
-            background-image: url(data:image/png;base64,{b64_encoded});
-            background-size: 50%; /* Tamanho da logo no fundo (ajuste se precisar) */
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-        /* Camada branca semi-transparente para garantir leitura do texto */
+        /* Cria uma camada atrás do conteúdo */
         .stApp::before {{
             content: "";
             position: absolute;
@@ -31,16 +26,30 @@ def set_background(image_file):
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(255, 255, 255, 0.85); /* 85% de branco por cima da logo */
-            z-index: -1;
+            z-index: -1; /* Fica atrás do texto */
+            
+            background-image: url(data:image/png;base64,{b64_encoded});
+            background-size: 40%; /* Tamanho um pouco menor para não dominar */
+            background-position: center center; /* Bem centralizado */
+            background-repeat: no-repeat;
+            background-attachment: fixed; /* Não se mexe ao rolar a página */
+            
+            /* O SEGUREDO: Opacidade bem baixa (12%) */
+            opacity: 0.12;
+            /* Filtro extra para suavizar as cores */
+            filter: grayscale(20%);
         }}
         </style>
     """
     st.markdown(style, unsafe_allow_html=True)
 
-# --- ESTILOS VISUAIS (BOTÕES) ---
+# --- ESTILOS VISUAIS (BOTÕES E TEXTOS) ---
 st.markdown("""
     <style>
+    /* Garante que o fundo principal seja transparente para mostrar a marca d'água */
+    .stApp {
+        background-color: transparent; 
+    }
     h1, h2, h3 { color: #003366 !important; text-align: center; }
     
     div.stButton > button:first-child {
@@ -118,8 +127,7 @@ def salvar_dataframe_completo(df):
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- APLICA A MARCA D'ÁGUA ---
-# Procura a logo na pasta
+# --- APLICA A MARCA D'ÁGUA SUTIL ---
 lista_logos = ["logo.jpg", "Logo.jpg", "logo.png", "logo dourada 3d (1) (1)[2014] - Copia.jpg"]
 logo_encontrada = None
 for nome in lista_logos:
@@ -128,10 +136,8 @@ for nome in lista_logos:
         break
 
 if logo_encontrada:
-    set_background(logo_encontrada)
-else:
-    # Se não achar, não trava o sistema, apenas avisa na lateral
-    st.sidebar.warning("Logo não encontrada para o fundo.")
+    # Chama a nova função corrigida
+    set_background_sutil(logo_encontrada)
 
 
 # --- MENU LATERAL DISCRETO ---
