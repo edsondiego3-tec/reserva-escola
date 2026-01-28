@@ -4,52 +4,15 @@ import os
 from datetime import date
 import urllib.parse
 import json
-import base64
+from PIL import Image
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Reserva CMJP", page_icon="🏫", layout="wide")
 
-# --- FUNÇÃO NOVA: MARCA D'ÁGUA SUTIL ---
-def set_background_sutil(image_file):
-    with open(image_file, "rb") as f:
-        img_data = f.read()
-    b64_encoded = base64.b64encode(img_data).decode()
-    
-    # CSS Modificado: Usa um pseudo-elemento com OPACIDADE baixa
-    style = f"""
-        <style>
-        /* Cria uma camada atrás do conteúdo */
-        .stApp::before {{
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1; /* Fica atrás do texto */
-            
-            background-image: url(data:image/png;base64,{b64_encoded});
-            background-size: 40%; /* Tamanho um pouco menor para não dominar */
-            background-position: center center; /* Bem centralizado */
-            background-repeat: no-repeat;
-            background-attachment: fixed; /* Não se mexe ao rolar a página */
-            
-            /* O SEGUREDO: Opacidade bem baixa (12%) */
-            opacity: 0.12;
-            /* Filtro extra para suavizar as cores */
-            filter: grayscale(20%);
-        }}
-        </style>
-    """
-    st.markdown(style, unsafe_allow_html=True)
-
-# --- ESTILOS VISUAIS (BOTÕES E TEXTOS) ---
+# --- ESTILOS VISUAIS ---
 st.markdown("""
     <style>
-    /* Garante que o fundo principal seja transparente para mostrar a marca d'água */
-    .stApp {
-        background-color: transparent; 
-    }
+    .stApp { background-color: #f0f2f6; }
     h1, h2, h3 { color: #003366 !important; text-align: center; }
     
     div.stButton > button:first-child {
@@ -68,7 +31,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ARQUIVOS E CONFIGURAÇÕES ---
+# --- ARQUIVOS ---
 ARQUIVO_DADOS = "banco_reservas.csv"
 ARQUIVO_CONFIG = "config.json"
 SENHA_ADMIN = "cmjp2026"
@@ -93,7 +56,7 @@ TURMAS_ESCOLA = {
     "ENSINO MÉDIO": ["1ª SÉRIE", "2ª SÉRIE", "3ª SÉRIE"]
 }
 
-# --- FUNÇÕES DE SISTEMA ---
+# --- FUNÇÕES ---
 def carregar_config():
     if not os.path.exists(ARQUIVO_CONFIG):
         padrao = {"total_projetores": 3}
@@ -123,30 +86,40 @@ def salvar_multiplas_reservas(lista_reservas):
 def salvar_dataframe_completo(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- INICIALIZAÇÃO ---
+# --- CARREGA DADOS ---
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- APLICA A MARCA D'ÁGUA SUTIL ---
-lista_logos = ["logo.jpg", "Logo.jpg", "logo.png", "logo dourada 3d (1) (1)[2014] - Copia.jpg"]
-logo_encontrada = None
-for nome in lista_logos:
-    if os.path.exists(nome):
-        logo_encontrada = nome
-        break
-
-if logo_encontrada:
-    # Chama a nova função corrigida
-    set_background_sutil(logo_encontrada)
-
-
-# --- MENU LATERAL DISCRETO ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("CMJP")
+    # SISTEMA DE BUSCA DE LOGO (Tenta vários nomes)
+    lista_nomes_possiveis = [
+        "logo.jpg", "Logo.jpg", "logo.png", "logo.jpeg", 
+        "logo dourada 3d (1) (1)[2014] - Copia.jpg"
+    ]
+    
+    logo_encontrada = None
+    for nome_arquivo in lista_nomes_possiveis:
+        if os.path.exists(nome_arquivo):
+            logo_encontrada = nome_arquivo
+            break
+            
+    if logo_encontrada:
+        st.image(logo_encontrada, use_container_width=True)
+    else:
+        # Se não achar nada, avisa (só para você saber)
+        st.warning("⚠️ Logo não encontrada. Verifique no GitHub.")
+    
+    st.divider()
     st.info(f"Equipamentos: **{QUANTIDADE_TOTAL_PROJETORES}**")
+    st.write("")
+    st.write("")
+    st.write("")
     st.markdown("---")
-    st.caption("Sistema Interno")
-    modo_acesso = st.selectbox("Acesso", ["Professor", "Administrador"], label_visibility="collapsed")
+    
+    # MENU DISCRETO
+    st.caption("Admin")
+    modo_acesso = st.selectbox("Menu", ["Professor", "Administrador"], label_visibility="collapsed")
 
 
 # ==================================================
@@ -154,7 +127,7 @@ with st.sidebar:
 # ==================================================
 if modo_acesso == "Professor":
     
-    st.markdown("<h1 style='text-align: center; color: #003366;'>Reserva de Data Show</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #003366;'>Reserva de Data Show</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
     df_reservas = carregar_dados()
@@ -233,19 +206,20 @@ if modo_acesso == "Professor":
             link_lourdinha = f"https://wa.me/{ZAP_LOURDINHA}?text={msg_codificada}"
 
             st.balloons()
-            st.success("Reserva Realizada!")
+            st.success("Reserva Realizada! Escolha para quem enviar:")
             
+            # Botões de WhatsApp
             st.markdown(f"""
             <a href="{link_gilmar}" target="_blank" style="text-decoration:none;">
-                <div style="background-color:#d9534f; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; font-weight:bold; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
+                <div style="background-color:#d9534f; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; font-weight:bold;">
                     🚨 1. ENVIAR PARA SEU GILMAR (OBRIGATÓRIO)
                 </div>
             </a>
             """, unsafe_allow_html=True)
             
             c_z1, c_z2 = st.columns(2)
-            with c_z1: st.markdown(f"<a href='{link_edson}' target='_blank' style='text-decoration:none;'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center; border:1px solid #003366;'><strong>2. Coord. Médio</strong></div></a>", unsafe_allow_html=True)
-            with c_z2: st.markdown(f"<a href='{link_lourdinha}' target='_blank' style='text-decoration:none;'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center; border:1px solid #003366;'><strong>3. Coord. Fund.</strong></div></a>", unsafe_allow_html=True)
+            with c_z1: st.markdown(f"<a href='{link_edson}' target='_blank'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center;'><strong>2. Coord. Médio</strong></div></a>", unsafe_allow_html=True)
+            with c_z2: st.markdown(f"<a href='{link_lourdinha}' target='_blank'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center;'><strong>3. Coord. Fund.</strong></div></a>", unsafe_allow_html=True)
 
     # TABELA FINAL
     st.divider()
