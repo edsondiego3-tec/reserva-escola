@@ -31,7 +31,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ARQUIVOS ---
+# --- ARQUIVOS E CONFIGURAÇÕES ---
 ARQUIVO_DADOS = "banco_reservas.csv"
 ARQUIVO_CONFIG = "config.json"
 SENHA_ADMIN = "cmjp2026"
@@ -86,40 +86,17 @@ def salvar_multiplas_reservas(lista_reservas):
 def salvar_dataframe_completo(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- CARREGA DADOS ---
+# --- CARREGAMENTO INICIAL ---
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- BARRA LATERAL ---
+# --- MENU LATERAL (SÓ CONFIGURAÇÃO) ---
 with st.sidebar:
-    # SISTEMA DE BUSCA DE LOGO (Tenta vários nomes)
-    lista_nomes_possiveis = [
-        "logo.jpg", "Logo.jpg", "logo.png", "logo.jpeg", 
-        "logo dourada 3d (1) (1)[2014] - Copia.jpg"
-    ]
-    
-    logo_encontrada = None
-    for nome_arquivo in lista_nomes_possiveis:
-        if os.path.exists(nome_arquivo):
-            logo_encontrada = nome_arquivo
-            break
-            
-    if logo_encontrada:
-        st.image(logo_encontrada, use_container_width=True)
-    else:
-        # Se não achar nada, avisa (só para você saber)
-        st.warning("⚠️ Logo não encontrada. Verifique no GitHub.")
-    
+    st.header("Ajustes")
+    # Menu discreto para trocar entre Professor e Admin
+    modo_acesso = st.selectbox("Perfil de Acesso", ["Professor", "Administrador"])
     st.divider()
-    st.info(f"Equipamentos: **{QUANTIDADE_TOTAL_PROJETORES}**")
-    st.write("")
-    st.write("")
-    st.write("")
-    st.markdown("---")
-    
-    # MENU DISCRETO
-    st.caption("Admin")
-    modo_acesso = st.selectbox("Menu", ["Professor", "Administrador"], label_visibility="collapsed")
+    st.info(f"Aparelhos Totais na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
 
 
 # ==================================================
@@ -127,6 +104,20 @@ with st.sidebar:
 # ==================================================
 if modo_acesso == "Professor":
     
+    # --- LOGO CENTRALIZADA NO TOPO ---
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1]) # Coluna do meio maior para centralizar
+    with col_l2:
+        lista_logos = ["logo.jpg", "Logo.jpg", "logo.png", "logo dourada 3d (1) (1)[2014] - Copia.jpg"]
+        logo_encontrada = None
+        for nome in lista_logos:
+            if os.path.exists(nome):
+                logo_encontrada = nome
+                break
+        
+        if logo_encontrada:
+            # Imagem centralizada
+            st.image(logo_encontrada, use_container_width=True)
+            
     st.markdown("<h2 style='text-align: center; color: #003366;'>Reserva de Data Show</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -144,30 +135,58 @@ if modo_acesso == "Professor":
     with col_form2:
         horarios_selecionados = st.multiselect("Selecione os Horários", HORARIOS_AULA)
         turmas_disponiveis = TURMAS_ESCOLA[nivel_selecionado]
-        turmas_selecionadas = st.multiselect("Selecione as Turmas", turmas_disponiveis)
+        turmas_selecionadas = st.multiselect("Selecione as Turmas (mesmo horário)", turmas_disponiveis)
 
-    # VERIFICAÇÃO
-    if horarios_selecionados:
+    # --- LÓGICA DE VERIFICAÇÃO (CORRIGIDA) ---
+    pode_salvar = False
+    
+    if horarios_selecionados and turmas_selecionadas:
         st.info("🔎 Verificando disponibilidade...")
-        horarios_com_problema = []
-        for hora in horarios_selecionados:
-            reservas_na_hora = df_reservas[
-                (df_reservas["Data"] == str(data_escolhida)) & 
-                (df_reservas["Horario"] == hora)
-            ]
-            qtd_livre = QUANTIDADE_TOTAL_PROJETORES - len(reservas_na_hora)
-            if qtd_livre <= 0:
-                horarios_com_problema.append(hora)
-
-        if horarios_com_problema:
-            st.error(f"❌ ESGOTADO para: {', '.join(horarios_com_problema)}")
+        
+        # 1. VERIFICAÇÃO DE ESTOQUE DIÁRIO (REGRA NOVA: 3 POR DIA)
+        reservas_do_dia = df_reservas[df_reservas["Data"] == str(data_escolhida)]
+        qtd_ja_usada_no_dia = len(reservas_do_dia)
+        
+        # Quantos slots o professor está tentando reservar agora?
+        # (Se ele selecionou 2 horários, ele vai gastar +2 usos do estoque diário)
+        qtd_solicitada_agora = len(horarios_selecionados) 
+        
+        estoque_restante_dia = QUANTIDADE_TOTAL_PROJETORES - qtd_ja_usada_no_dia
+        
+        if estoque_restante_dia <= 0:
+            st.error(f"❌ INDISPONÍVEL: Todos os {QUANTIDADE_TOTAL_PROJETORES} aparelhos já foram reservados para este dia.")
             pode_salvar = False
+            
+        elif qtd_solicitada_agora > estoque_restante_dia:
+            st.error(f"⚠️ Atenção: Só restam {estoque_restante_dia} reservas para hoje. Você selecionou {qtd_solicitada_agora} horários.")
+            pode_salvar = False
+            
         else:
-            st.success("✅ Disponível!")
-            pode_salvar = True
-    else:
-        pode_salvar = False
+            # 2. VERIFICAÇÃO DE TURMA DUPLICADA (ANTI-CONFLITO)
+            conflito_turma = False
+            lista_conflitos = []
+            
+            for hora in horarios_selecionados:
+                for turma in turmas_selecionadas:
+                    # Procura se JA EXISTE uma reserva para (Data + Hora + Turma)
+                    conflito = df_reservas[
+                        (df_reservas["Data"] == str(data_escolhida)) & 
+                        (df_reservas["Horario"] == hora) & 
+                        (df_reservas["Turmas"].str.contains(turma, na=False)) # Verifica se a turma está na lista
+                    ]
+                    
+                    if not conflito.empty:
+                        conflito_turma = True
+                        lista_conflitos.append(f"{turma} no {hora}")
 
+            if conflito_turma:
+                st.error(f"❌ CONFLITO: Já existe reserva para: {', '.join(lista_conflitos)}")
+                st.warning("Outro professor já reservou essa turma neste horário.")
+                pode_salvar = False
+            else:
+                st.success(f"✅ Disponível! (Restam {estoque_restante_dia - qtd_solicitada_agora} aparelhos para o dia)")
+                pode_salvar = True
+    
     st.write("") 
     
     # BOTÃO CONFIRMAR
@@ -179,7 +198,7 @@ if modo_acesso == "Professor":
         elif not turmas_selecionadas:
             st.warning("⚠️ Selecione pelo menos uma turma.")
         elif not pode_salvar:
-            st.error("⚠️ Horários indisponíveis.")
+            st.error("⚠️ Verifique os erros acima antes de continuar.")
         else:
             novas_reservas = []
             lista_horarios_texto = ""
@@ -206,20 +225,19 @@ if modo_acesso == "Professor":
             link_lourdinha = f"https://wa.me/{ZAP_LOURDINHA}?text={msg_codificada}"
 
             st.balloons()
-            st.success("Reserva Realizada! Escolha para quem enviar:")
+            st.success("Reserva Realizada!")
             
-            # Botões de WhatsApp
             st.markdown(f"""
             <a href="{link_gilmar}" target="_blank" style="text-decoration:none;">
-                <div style="background-color:#d9534f; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; font-weight:bold;">
+                <div style="background-color:#d9534f; color:white; padding:15px; border-radius:10px; text-align:center; margin-bottom:10px; font-weight:bold; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
                     🚨 1. ENVIAR PARA SEU GILMAR (OBRIGATÓRIO)
                 </div>
             </a>
             """, unsafe_allow_html=True)
             
             c_z1, c_z2 = st.columns(2)
-            with c_z1: st.markdown(f"<a href='{link_edson}' target='_blank'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center;'><strong>2. Coord. Médio</strong></div></a>", unsafe_allow_html=True)
-            with c_z2: st.markdown(f"<a href='{link_lourdinha}' target='_blank'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center;'><strong>3. Coord. Fund.</strong></div></a>", unsafe_allow_html=True)
+            with c_z1: st.markdown(f"<a href='{link_edson}' target='_blank' style='text-decoration:none;'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center; border:1px solid #003366;'><strong>2. Coord. Médio</strong></div></a>", unsafe_allow_html=True)
+            with c_z2: st.markdown(f"<a href='{link_lourdinha}' target='_blank' style='text-decoration:none;'><div style='background-color:#D4AF37; color:#003366; padding:10px; border-radius:5px; text-align:center; border:1px solid #003366;'><strong>3. Coord. Fund.</strong></div></a>", unsafe_allow_html=True)
 
     # TABELA FINAL
     st.divider()
@@ -244,7 +262,7 @@ elif modo_acesso == "Administrador":
         st.success("Acesso Liberado")
         
         with st.expander("⚙️ Quantidade de Aparelhos", expanded=True):
-            novo_total = st.number_input("Total Disponível:", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
+            novo_total = st.number_input("Total Disponível (Por Dia):", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
             if st.button("Salvar Quantidade"):
                 config["total_projetores"] = novo_total
                 salvar_config(config)
