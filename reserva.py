@@ -90,13 +90,12 @@ def salvar_dataframe_completo(df):
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- MENU LATERAL (SÓ CONFIGURAÇÃO) ---
+# --- MENU LATERAL ---
 with st.sidebar:
     st.header("Ajustes")
-    # Menu discreto para trocar entre Professor e Admin
     modo_acesso = st.selectbox("Perfil de Acesso", ["Professor", "Administrador"])
     st.divider()
-    st.info(f"Aparelhos Totais na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
+    st.info(f"Aparelhos na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
 
 
 # ==================================================
@@ -104,8 +103,9 @@ with st.sidebar:
 # ==================================================
 if modo_acesso == "Professor":
     
-    # --- LOGO CENTRALIZADA NO TOPO ---
-    col_l1, col_l2, col_l3 = st.columns([1, 2, 1]) # Coluna do meio maior para centralizar
+    # --- LOGO MENOR E CENTRALIZADA ---
+    # Colunas 1-1-1 ajudam a centralizar melhor itens pequenos
+    col_l1, col_l2, col_l3 = st.columns([1, 1, 1]) 
     with col_l2:
         lista_logos = ["logo.jpg", "Logo.jpg", "logo.png", "logo dourada 3d (1) (1)[2014] - Copia.jpg"]
         logo_encontrada = None
@@ -115,10 +115,10 @@ if modo_acesso == "Professor":
                 break
         
         if logo_encontrada:
-            # Imagem centralizada
-            st.image(logo_encontrada, use_container_width=True)
+            # width=120 deixa a logo bem discreta e menor
+            st.image(logo_encontrada, width=120)
             
-    st.markdown("<h2 style='text-align: center; color: #003366;'>Reserva de Data Show</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #003366;'>Reserva de Data Show</h3>", unsafe_allow_html=True)
     st.markdown("---")
 
     df_reservas = carregar_dados()
@@ -135,7 +135,7 @@ if modo_acesso == "Professor":
     with col_form2:
         horarios_selecionados = st.multiselect("Selecione os Horários", HORARIOS_AULA)
         turmas_disponiveis = TURMAS_ESCOLA[nivel_selecionado]
-        turmas_selecionadas = st.multiselect("Selecione as Turmas (mesmo horário)", turmas_disponiveis)
+        turmas_selecionadas = st.multiselect("Selecione as Turmas", turmas_disponiveis)
 
     # --- LÓGICA DE VERIFICAÇÃO (CORRIGIDA) ---
     pode_salvar = False
@@ -143,49 +143,34 @@ if modo_acesso == "Professor":
     if horarios_selecionados and turmas_selecionadas:
         st.info("🔎 Verificando disponibilidade...")
         
-        # 1. VERIFICAÇÃO DE ESTOQUE DIÁRIO (REGRA NOVA: 3 POR DIA)
-        reservas_do_dia = df_reservas[df_reservas["Data"] == str(data_escolhida)]
-        qtd_ja_usada_no_dia = len(reservas_do_dia)
+        erros_encontrados = []
         
-        # Quantos slots o professor está tentando reservar agora?
-        # (Se ele selecionou 2 horários, ele vai gastar +2 usos do estoque diário)
-        qtd_solicitada_agora = len(horarios_selecionados) 
-        
-        estoque_restante_dia = QUANTIDADE_TOTAL_PROJETORES - qtd_ja_usada_no_dia
-        
-        if estoque_restante_dia <= 0:
-            st.error(f"❌ INDISPONÍVEL: Todos os {QUANTIDADE_TOTAL_PROJETORES} aparelhos já foram reservados para este dia.")
-            pode_salvar = False
+        for hora in horarios_selecionados:
+            # Filtra reservas APENAS para aquele dia E aquele horário específico
+            reservas_neste_horario = df_reservas[
+                (df_reservas["Data"] == str(data_escolhida)) & 
+                (df_reservas["Horario"] == hora)
+            ]
             
-        elif qtd_solicitada_agora > estoque_restante_dia:
-            st.error(f"⚠️ Atenção: Só restam {estoque_restante_dia} reservas para hoje. Você selecionou {qtd_solicitada_agora} horários.")
-            pode_salvar = False
+            # 1. VERIFICA QUANTIDADE (Regra: Máximo 3 por horário)
+            qtd_ocupada = len(reservas_neste_horario)
+            if qtd_ocupada >= QUANTIDADE_TOTAL_PROJETORES:
+                erros_encontrados.append(f"❌ {hora}: Todos os {QUANTIDADE_TOTAL_PROJETORES} aparelhos ocupados.")
             
-        else:
-            # 2. VERIFICAÇÃO DE TURMA DUPLICADA (ANTI-CONFLITO)
-            conflito_turma = False
-            lista_conflitos = []
-            
-            for hora in horarios_selecionados:
-                for turma in turmas_selecionadas:
-                    # Procura se JA EXISTE uma reserva para (Data + Hora + Turma)
-                    conflito = df_reservas[
-                        (df_reservas["Data"] == str(data_escolhida)) & 
-                        (df_reservas["Horario"] == hora) & 
-                        (df_reservas["Turmas"].str.contains(turma, na=False)) # Verifica se a turma está na lista
-                    ]
-                    
-                    if not conflito.empty:
-                        conflito_turma = True
-                        lista_conflitos.append(f"{turma} no {hora}")
-
-            if conflito_turma:
-                st.error(f"❌ CONFLITO: Já existe reserva para: {', '.join(lista_conflitos)}")
-                st.warning("Outro professor já reservou essa turma neste horário.")
-                pode_salvar = False
+            # 2. VERIFICA CONFLITO DE TURMA (Regra: Turma não pode ter 2 reservas no mesmo horário)
             else:
-                st.success(f"✅ Disponível! (Restam {estoque_restante_dia - qtd_solicitada_agora} aparelhos para o dia)")
-                pode_salvar = True
+                for turma in turmas_selecionadas:
+                    conflito = reservas_neste_horario[reservas_neste_horario["Turmas"].str.contains(turma, na=False)]
+                    if not conflito.empty:
+                        erros_encontrados.append(f"⚠️ {hora}: A turma {turma} já tem reserva.")
+
+        if erros_encontrados:
+            for erro in erros_encontrados:
+                st.error(erro)
+            pode_salvar = False
+        else:
+            st.success(f"✅ Tudo certo! Aparelhos disponíveis para os horários selecionados.")
+            pode_salvar = True
     
     st.write("") 
     
@@ -198,7 +183,7 @@ if modo_acesso == "Professor":
         elif not turmas_selecionadas:
             st.warning("⚠️ Selecione pelo menos uma turma.")
         elif not pode_salvar:
-            st.error("⚠️ Verifique os erros acima antes de continuar.")
+            st.error("⚠️ Resolva os conflitos acima antes de reservar.")
         else:
             novas_reservas = []
             lista_horarios_texto = ""
@@ -244,6 +229,8 @@ if modo_acesso == "Professor":
     st.subheader(f"📅 Agenda do dia {data_escolhida}")
     filtro_hoje = df_reservas[df_reservas["Data"] == str(data_escolhida)]
     if not filtro_hoje.empty:
+        # Ordena para ficar bonito
+        filtro_hoje = filtro_hoje.sort_values("Horario")
         st.table(filtro_hoje[["Horario", "Turmas", "Professor"]])
     else:
         st.info("Nenhuma reserva para esta data ainda.")
@@ -262,7 +249,7 @@ elif modo_acesso == "Administrador":
         st.success("Acesso Liberado")
         
         with st.expander("⚙️ Quantidade de Aparelhos", expanded=True):
-            novo_total = st.number_input("Total Disponível (Por Dia):", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
+            novo_total = st.number_input("Total de Data Shows (Estoque):", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
             if st.button("Salvar Quantidade"):
                 config["total_projetores"] = novo_total
                 salvar_config(config)
