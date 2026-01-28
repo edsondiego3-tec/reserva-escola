@@ -7,7 +7,6 @@ import json
 from PIL import Image
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
-# ATENÇÃO: Esta deve ser sempre a primeira linha de comando Streamlit
 st.set_page_config(page_title="Reserva CMJP", page_icon="🏫", layout="wide")
 
 # --- ESTILOS VISUAIS ---
@@ -16,7 +15,6 @@ st.markdown("""
     .stApp { background-color: #f0f2f6; }
     h1, h2, h3 { color: #003366 !important; text-align: center; }
     
-    /* Botão Principal Dourado */
     div.stButton > button:first-child {
         background-color: #D4AF37;
         color: #003366;
@@ -33,7 +31,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ARQUIVOS E CONFIGURAÇÕES ---
+# --- ARQUIVOS ---
 ARQUIVO_DADOS = "banco_reservas.csv"
 ARQUIVO_CONFIG = "config.json"
 SENHA_ADMIN = "cmjp2026"
@@ -88,39 +86,44 @@ def salvar_multiplas_reservas(lista_reservas):
 def salvar_dataframe_completo(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- CARREGA DADOS INICIAIS ---
+# --- CARREGA DADOS ---
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- BARRA LATERAL (SIDEBAR) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    # 1. Logo no topo
-    if os.path.exists("logo.jpg"):
-        st.image("logo.jpg", use_container_width=True)
-    elif os.path.exists("Logo.jpg"): # Tenta com maiúscula caso o windows tenha alterado
-        st.image("Logo.jpg", use_container_width=True)
+    # SISTEMA DE BUSCA DE LOGO (Tenta vários nomes)
+    lista_nomes_possiveis = [
+        "logo.jpg", "Logo.jpg", "logo.png", "logo.jpeg", 
+        "logo dourada 3d (1) (1)[2014] - Copia.jpg"
+    ]
+    
+    logo_encontrada = None
+    for nome_arquivo in lista_nomes_possiveis:
+        if os.path.exists(nome_arquivo):
+            logo_encontrada = nome_arquivo
+            break
+            
+    if logo_encontrada:
+        st.image(logo_encontrada, use_container_width=True)
+    else:
+        # Se não achar nada, avisa (só para você saber)
+        st.warning("⚠️ Logo não encontrada. Verifique no GitHub.")
     
     st.divider()
-    
-    # 2. Informação rápida
-    st.info(f"Equipamentos na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
-    
-    # 3. Espaçador para empurrar o menu para baixo
+    st.info(f"Equipamentos: **{QUANTIDADE_TOTAL_PROJETORES}**")
     st.write("")
     st.write("")
     st.write("")
     st.markdown("---")
     
-    # 4. MENU DE ACESSO DISCRETO (No final)
-    st.caption("Configurações do Sistema")
-    modo_acesso = st.selectbox(
-        "Alterar Modo de Visualização", 
-        ["Professor", "Administrador"], 
-        index=0  # O índice 0 garante que 'Professor' seja o padrão
-    )
+    # MENU DISCRETO
+    st.caption("Admin")
+    modo_acesso = st.selectbox("Menu", ["Professor", "Administrador"], label_visibility="collapsed")
+
 
 # ==================================================
-# ÁREA DO PROFESSOR (PADRÃO)
+# ÁREA DO PROFESSOR
 # ==================================================
 if modo_acesso == "Professor":
     
@@ -240,18 +243,16 @@ elif modo_acesso == "Administrador":
     if senha == SENHA_ADMIN:
         st.success("Acesso Liberado")
         
-        # ABA 1: QUANTIDADE
-        with st.expander("⚙️ Alterar Quantidade de Aparelhos", expanded=True):
-            novo_total = st.number_input("Total de Data Shows disponíveis:", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
-            if st.button("Salvar Nova Quantidade"):
+        with st.expander("⚙️ Quantidade de Aparelhos", expanded=True):
+            novo_total = st.number_input("Total Disponível:", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
+            if st.button("Salvar Quantidade"):
                 config["total_projetores"] = novo_total
                 salvar_config(config)
-                st.success("Quantidade Atualizada!")
+                st.success("Atualizado!")
                 st.rerun()
 
-        # ABA 2: LIMPEZA
-        st.markdown("### 🗑️ Cancelar / Excluir Reservas")
-        st.warning("Marque a caixa 'delete' na direita para apagar e clique no botão abaixo.")
+        st.markdown("### 🗑️ Gerenciar Reservas")
+        st.warning("Selecione para excluir e clique em Salvar.")
         
         df_atual = carregar_dados()
         df_editado = st.data_editor(df_atual, num_rows="dynamic", use_container_width=True, key="admin_editor")
