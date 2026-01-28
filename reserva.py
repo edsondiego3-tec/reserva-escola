@@ -4,7 +4,7 @@ import os
 from datetime import date, datetime
 import urllib.parse
 import json
-import plotly.express as px # Biblioteca de gráficos profissional
+import plotly.express as px
 
 # --- CONFIGURAÇÃO INICIAL DA PÁGINA ---
 st.set_page_config(page_title="Reserva CMJP", page_icon="🏫", layout="wide")
@@ -15,7 +15,6 @@ st.markdown("""
     .stApp { background-color: #f0f2f6; }
     h1, h2, h3 { color: #003366 !important; text-align: center; font-family: 'Helvetica', sans-serif; }
     
-    /* Cards de Métricas */
     div[data-testid="stMetric"] {
         background-color: white;
         padding: 15px;
@@ -24,7 +23,6 @@ st.markdown("""
         text-align: center;
     }
 
-    /* Botões Dourados Estilizados */
     div.stButton > button:first-child {
         background-color: #D4AF37;
         color: #003366;
@@ -48,11 +46,11 @@ st.markdown("""
 ARQUIVO_DADOS = "banco_reservas.csv"
 ARQUIVO_CONFIG = "config.json"
 
-# Tenta pegar a senha dos segredos do Streamlit, se não tiver, usa a padrão (fallback)
+# Tenta pegar a senha dos segredos, senão usa a padrão
 try:
     SENHA_ADMIN = st.secrets["SENHA_ADMIN"]
 except:
-    SENHA_ADMIN = "cmjp2026" # Senha padrão caso não esteja configurada na nuvem
+    SENHA_ADMIN = "cmjp2026"
 
 # WHATSAPP
 ZAP_GILMAR = "5583986243832"
@@ -74,23 +72,29 @@ TURMAS_ESCOLA = {
     "ENSINO MÉDIO": ["1ª SÉRIE", "2ª SÉRIE", "3ª SÉRIE"]
 }
 
-# --- FUNÇÕES DE SISTEMA (BACKEND) ---
+# --- FUNÇÕES DE SISTEMA ---
 def carregar_config():
-    # Carrega config ou cria padrão se não existir
     padrao = {
         "total_projetores": 3, 
-        "lista_professores": ["Selecione...", "Professor Visitante"]
+        "lista_professores": ["ERRO: Verifique o arquivo config.json"]
     }
+    
     if not os.path.exists(ARQUIVO_CONFIG):
+        # Se não existe, cria um padrão
         try:
             with open(ARQUIVO_CONFIG, "w", encoding='utf-8') as f:
                 json.dump(padrao, f, ensure_ascii=False, indent=4)
         except:
-            return padrao
+            pass
         return padrao
     
-    with open(ARQUIVO_CONFIG, "r", encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(ARQUIVO_CONFIG, "r", encoding='utf-8') as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        st.error(f"⚠️ ERRO NO ARQUIVO DE CONFIGURAÇÃO: {e}")
+        st.stop() # Para o sistema para você ver o erro
+        return padrao
 
 def salvar_config(nova_config):
     with open(ARQUIVO_CONFIG, "w", encoding='utf-8') as f:
@@ -110,9 +114,7 @@ def salvar_multiplas_reservas(lista_reservas):
 def salvar_dataframe_completo(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- FUNÇÃO VISUAL: LOGO ---
 def exibir_logo():
-    # Tenta encontrar a logo de forma inteligente
     lista_logos = ["logo.jpg", "Logo.jpg", "logo.png", "logo.jpeg", "logo dourada 3d (1) (1)[2014] - Copia.jpg"]
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
@@ -126,13 +128,13 @@ config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 LISTA_PROFESSORES = config.get("lista_professores", ["Cadastre no Config"])
 
-# --- MENU LATERAL INTELIGENTE ---
+# --- MENU LATERAL ---
 with st.sidebar:
     st.header("⚙️ Painel de Controle")
     modo_acesso = st.selectbox("Perfil", ["Professor", "Administrador"])
     st.divider()
     
-    # Status Rápido (Side Widget)
+    # Status Rápido
     df_rapido = carregar_dados()
     reservas_hoje = 0
     if not df_rapido.empty:
@@ -146,7 +148,7 @@ with st.sidebar:
     st.progress(min(reservas_hoje / QUANTIDADE_TOTAL_PROJETORES, 1.0))
 
 # ==================================================
-# FLUXO 1: PROFESSOR (Interface Simplificada)
+# FLUXO 1: PROFESSOR
 # ==================================================
 if modo_acesso == "Professor":
     exibir_logo()
@@ -155,13 +157,11 @@ if modo_acesso == "Professor":
 
     df_reservas = carregar_dados()
 
-    # FORMULÁRIO EM CONTAINER (Mais organizado)
     with st.container():
         st.subheader("📝 Nova Solicitação")
         
         col_form1, col_form2 = st.columns(2)
         with col_form1:
-            # MELHORIA: Selectbox ao invés de digitar
             nome_prof = st.selectbox("Selecione seu Nome", LISTA_PROFESSORES)
             data_escolhida = st.date_input("Data de Uso", min_value=date.today())
             nivel_selecionado = st.selectbox("Nível de Ensino", list(TURMAS_ESCOLA.keys()))
@@ -171,7 +171,6 @@ if modo_acesso == "Professor":
             turmas_disponiveis = TURMAS_ESCOLA[nivel_selecionado]
             turmas_selecionadas = st.multiselect("Turmas (Para o mesmo horário)", turmas_disponiveis)
 
-    # VALIDAÇÃO DE REGRAS DE NEGÓCIO
     pode_salvar = False
     
     if horarios_selecionados and turmas_selecionadas and nome_prof != "Selecione seu nome...":
@@ -179,17 +178,13 @@ if modo_acesso == "Professor":
         erros_encontrados = []
         
         for hora in horarios_selecionados:
-            # Filtra contexto: Data e Hora específica
             reservas_neste_horario = df_reservas[
                 (df_reservas["Data"] == str(data_escolhida)) & 
                 (df_reservas["Horario"] == hora)
             ]
             
-            # REGRA 1: Estoque por Horário (Máx 3)
             if len(reservas_neste_horario) >= QUANTIDADE_TOTAL_PROJETORES:
                 erros_encontrados.append(f"❌ {hora}: Todos os {QUANTIDADE_TOTAL_PROJETORES} aparelhos ocupados.")
-            
-            # REGRA 2: Conflito de Turma (Turma já tem aula com Datashow?)
             else:
                 for turma in turmas_selecionadas:
                     conflito = reservas_neste_horario[reservas_neste_horario["Turmas"].str.contains(turma, na=False)]
@@ -208,7 +203,6 @@ if modo_acesso == "Professor":
 
     st.write("")
     
-    # AÇÃO DE SALVAR
     if st.button("CONFIRMAR AGENDAMENTO"):
         if not pode_salvar:
             st.error("Corrija os erros acima antes de prosseguir.")
@@ -230,132 +224,82 @@ if modo_acesso == "Professor":
 
             salvar_multiplas_reservas(novas_reservas)
             
-            # Geração de Links Inteligentes
             msg_base = f"*RESERVA DATASHOW CMJP* 🏫\n\n*Prof:* {nome_prof}\n*Data:* {data_escolhida.strftime('%d/%m/%Y')}\n*Turmas:* {turmas_texto}\n*Horários:*{lista_horarios_msg}"
             msg_enc = urllib.parse.quote(msg_base)
             
             st.balloons()
             st.success("✅ Reserva salva com sucesso!")
             
-            # Botões de Ação Rápida
             col_z1, col_z2, col_z3 = st.columns(3)
             with col_z1:
-                st.link_button("🚨 AVISE SEU GILMAR (Obrigatório)", f"https://wa.me/{ZAP_GILMAR}?text={msg_enc}")
+                st.markdown(f"<a href='https://wa.me/{ZAP_GILMAR}?text={msg_enc}' target='_blank'><button style='background-color:#d9534f; color:white; border:none; padding:10px; width:100%; border-radius:5px;'>🚨 AVISE SEU GILMAR</button></a>", unsafe_allow_html=True)
             with col_z2:
-                st.link_button("Avise Coord. Médio", f"https://wa.me/{ZAP_EDSON}?text={msg_enc}")
+                st.markdown(f"<a href='https://wa.me/{ZAP_EDSON}?text={msg_enc}' target='_blank'><button style='background-color:#D4AF37; color:#003366; border:none; padding:10px; width:100%; border-radius:5px;'>Coord. Médio</button></a>", unsafe_allow_html=True)
             with col_z3:
-                st.link_button("Avise Coord. Fund.", f"https://wa.me/{ZAP_LOURDINHA}?text={msg_enc}")
+                st.markdown(f"<a href='https://wa.me/{ZAP_LOURDINHA}?text={msg_enc}' target='_blank'><button style='background-color:#D4AF37; color:#003366; border:none; padding:10px; width:100%; border-radius:5px;'>Coord. Fund.</button></a>", unsafe_allow_html=True)
 
-    # AGENDA VISUAL DO DIA
     st.divider()
     st.subheader(f"📅 Agenda: {data_escolhida.strftime('%d/%m/%Y')}")
     filtro_hoje = df_reservas[df_reservas["Data"] == str(data_escolhida)]
     
     if not filtro_hoje.empty:
         filtro_hoje = filtro_hoje.sort_values("Horario")
-        # Visual clean da tabela
-        st.dataframe(
-            filtro_hoje[["Horario", "Turmas", "Professor"]],
-            hide_index=True,
-            use_container_width=True
-        )
+        st.dataframe(filtro_hoje[["Horario", "Turmas", "Professor"]], hide_index=True, use_container_width=True)
     else:
         st.info("Nenhuma reserva registrada para esta data.")
 
 # ==================================================
-# FLUXO 2: ADMINISTRADOR (Painel Completo)
+# FLUXO 2: ADMINISTRADOR
 # ==================================================
 elif modo_acesso == "Administrador":
-    
     st.markdown("## 🔒 Painel de Gestão")
-    
     senha = st.text_input("Senha de Acesso:", type="password")
     
     if senha == SENHA_ADMIN:
         st.success("Acesso Autenticado")
+        tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🗑️ Gerenciar", "⚙️ Configurações"])
         
-        # ABAS DO ADMINISTRADOR
-        tab1, tab2, tab3 = st.tabs(["📊 Dashboard & Relatórios", "🗑️ Gerenciar Reservas", "⚙️ Configurações"])
-        
-        # --- ABA 1: DASHBOARD (NOVIDADE!) ---
         with tab1:
             st.markdown("### Indicadores de Uso")
-            
             df_dash = carregar_dados()
-            
             if not df_dash.empty:
-                # Métricas Principais
                 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-                total_reservas = len(df_dash)
-                top_prof = df_dash['Professor'].mode()[0] if not df_dash.empty else "-"
-                # Converte para data para pegar o mês
-                df_dash['DataObj'] = pd.to_datetime(df_dash['Data'])
-                reservas_mes = len(df_dash[df_dash['DataObj'].dt.month == date.today().month])
-
-                col_kpi1.metric("Total de Reservas (Histórico)", total_reservas)
-                col_kpi2.metric("Reservas neste Mês", reservas_mes)
-                col_kpi3.metric("Professor que mais usa", top_prof)
+                col_kpi1.metric("Total Reservas", len(df_dash))
+                col_kpi3.metric("Top Professor", df_dash['Professor'].mode()[0])
                 
                 st.divider()
-                
-                # Gráficos (Plotly)
                 col_g1, col_g2 = st.columns(2)
-                
                 with col_g1:
-                    st.caption("Reservas por Nível de Ensino")
-                    fig_pizza = px.pie(df_dash, names='Nivel', hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
+                    fig_pizza = px.pie(df_dash, names='Nivel', hole=0.4)
                     st.plotly_chart(fig_pizza, use_container_width=True)
-                    
                 with col_g2:
-                    st.caption("Uso por Professor (Top 10)")
-                    contagem_prof = df_dash['Professor'].value_counts().head(10).reset_index()
-                    contagem_prof.columns = ['Professor', 'Qtd']
-                    fig_bar = px.bar(contagem_prof, x='Qtd', y='Professor', orientation='h', text='Qtd', color='Qtd')
+                    contagem = df_dash['Professor'].value_counts().head(10).reset_index()
+                    contagem.columns = ['Professor', 'Qtd']
+                    fig_bar = px.bar(contagem, x='Qtd', y='Professor', orientation='h')
                     st.plotly_chart(fig_bar, use_container_width=True)
             else:
-                st.info("Ainda não há dados suficientes para gerar gráficos.")
+                st.info("Sem dados para gráficos.")
 
-        # --- ABA 2: GERENCIAMENTO ---
         with tab2:
-            st.markdown("### Banco de Dados de Reservas")
-            st.warning("Aqui você pode editar ou excluir reservas manualmente.")
-            
+            st.markdown("### Banco de Dados")
             df_atual = carregar_dados()
-            # Editor poderoso do Streamlit
-            df_editado = st.data_editor(
-                df_atual, 
-                num_rows="dynamic", 
-                use_container_width=True,
-                key="editor_adm"
-            )
-            
-            if st.button("💾 SALVAR ALTERAÇÕES NO BANCO"):
+            df_editado = st.data_editor(df_atual, num_rows="dynamic", use_container_width=True, key="adm_editor")
+            if st.button("💾 SALVAR ALTERAÇÕES"):
                 salvar_dataframe_completo(df_editado)
-                st.success("Banco de dados atualizado com sucesso!")
+                st.success("Atualizado!")
                 st.rerun()
 
-        # --- ABA 3: CONFIGURAÇÕES ---
         with tab3:
-            st.markdown("### Parâmetros do Sistema")
+            st.markdown("### Configurações")
+            novo_total = st.number_input("Total Data Shows:", value=int(QUANTIDADE_TOTAL_PROJETORES))
+            lista_texto = st.text_area("Lista de Professores (separado por vírgula):", ", ".join(LISTA_PROFESSORES))
             
-            # Configuração de Aparelhos
-            st.write("Estoque de Data Shows")
-            novo_total = st.number_input("Quantidade Total:", min_value=0, value=int(QUANTIDADE_TOTAL_PROJETORES))
-            
-            # Configuração de Professores (Edição da lista)
-            st.write("Lista de Professores Cadastrados")
-            # Truque para editar lista como texto
-            lista_texto = st.text_area("Edite os nomes (separe por vírgula):", ", ".join(LISTA_PROFESSORES))
-            
-            if st.button("Atualizar Configurações"):
-                nova_lista_profs = [x.strip() for x in lista_texto.split(",")]
-                
+            if st.button("Atualizar Config"):
+                nova_lista = [x.strip() for x in lista_texto.split(",")]
                 config["total_projetores"] = novo_total
-                config["lista_professores"] = nova_lista_profs
-                
+                config["lista_professores"] = nova_lista
                 salvar_config(config)
-                st.success("Configuração Salva! Recarregando...")
+                st.success("Salvo!")
                 st.rerun()
-
     elif senha != "":
-        st.error("Senha de acesso incorreta.")
+        st.error("Senha incorreta.")

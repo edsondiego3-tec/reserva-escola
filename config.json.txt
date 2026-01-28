@@ -1,29 +1,28 @@
 {
     "total_projetores": 3,
     "lista_professores": [
-        "Selecione seu nome..."
-        "ADEMAR (FILOSOFIA)"
-        "ANDERSON (MATEMÁTICA)"
-        "ARISTELIA (FILOSOFIA)"
-        "BRENDA (ED. FISICA)"
-        "CAROLINA (GRAMATICA)"
-        "DAIANE (BIOLOGIA)"
-        "DAYANNE (PORTUGUES)"
-        "EDSON (COORDENAÇÃO)"
-        "ELAYNE (PSI. PEDAGOGA)"
-        "ESLÂNIA (HISTORIA)"
-        "FRANCISCO (MATEMÁTICA)"
-        "ISADORA (QUIMICA)"
-        "JANAINA (LITERATURA)"
-        "JANILSON (GEOGRAFIA)"
-        "KARLA (FISICA)"
-        "LARISSA (MATEMÁTICA)"
-        "LOURINHA (COORDENAÇÃO)"
-        "LUIZA (ED. FISICA)"
-        "MARILIA (CIENCIAS)"
-        "MAYARA (ARTES)"
-        "PAULO (HISTORIA)"
+        "Selecione seu nome...",
+        "ADEMAR (FILOSOFIA)",
+        "ANDERSON (MATEMÁTICA)",
+        "ARISTELIA (FILOSOFIA)",
+        "BRENDA (ED. FISICA)",
+        "CAROLINA (GRAMATICA)",
+        "DAIANE (BIOLOGIA)",
+        "DAYANNE (PORTUGUES)",
+        "EDSON (COORDENAÇÃO)",
+        "ELAYNE (PSI. PEDAGOGA)",
+        "ESLÂNIA (HISTORIA)",
+        "FRANCISCO (MATEMÁTICA)",
+        "ISADORA (QUIMICA)",
+        "JANAINA (LITERATURA)",
+        "JANILSON (GEOGRAFIA)",
+        "KARLA (FISICA)",
+        "LARISSA (MATEMÁTICA)",
+        "LOURINHA (COORDENAÇÃO)",
+        "LUIZA (ED. FISICA)",
+        "MARILIA (CIENCIAS)",
+        "MAYARA (ARTES)",
+        "PAULO (HISTORIA)",
         "ROSANY (INGLES)"
     ]
 }
-
