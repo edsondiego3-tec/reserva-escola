@@ -7,15 +7,16 @@ import json
 from PIL import Image
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
+# ATENÇÃO: Esta deve ser sempre a primeira linha de comando Streamlit
 st.set_page_config(page_title="Reserva CMJP", page_icon="🏫", layout="wide")
 
-# --- ESTILOS VISUAIS (AZUL E DOURADO) ---
+# --- ESTILOS VISUAIS ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
     h1, h2, h3 { color: #003366 !important; text-align: center; }
     
-    /* Botão Principal */
+    /* Botão Principal Dourado */
     div.stButton > button:first-child {
         background-color: #D4AF37;
         color: #003366;
@@ -32,14 +33,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ARQUIVOS ---
+# --- ARQUIVOS E CONFIGURAÇÕES ---
 ARQUIVO_DADOS = "banco_reservas.csv"
 ARQUIVO_CONFIG = "config.json"
-
-# --- SENHA DO ADMINISTRADOR ---
 SENHA_ADMIN = "cmjp2026"
 
-# NÚMEROS DE WHATSAPP
+# WHATSAPP
 ZAP_GILMAR = "5583986243832"
 ZAP_EDSON = "5583991350479"
 ZAP_LOURDINHA = "5583987104722"
@@ -63,14 +62,12 @@ TURMAS_ESCOLA = {
 def carregar_config():
     if not os.path.exists(ARQUIVO_CONFIG):
         padrao = {"total_projetores": 3}
-        # Tenta criar o arquivo se não existir
         try:
             with open(ARQUIVO_CONFIG, "w") as f:
                 json.dump(padrao, f)
         except:
-            return padrao # Se der erro de permissão, usa a memória
+            return padrao
         return padrao
-    
     with open(ARQUIVO_CONFIG, "r") as f:
         return json.load(f)
 
@@ -91,35 +88,42 @@ def salvar_multiplas_reservas(lista_reservas):
 def salvar_dataframe_completo(df):
     df.to_csv(ARQUIVO_DADOS, index=False)
 
-# --- CARREGA CONFIGURAÇÃO ---
+# --- CARREGA DADOS INICIAIS ---
 config = carregar_config()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# --- MENU LATERAL ---
+# --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
-    st.header("Menu de Acesso")
-    modo_acesso = st.radio("Escolha o Perfil:", ["Professor (Fazer Reserva)", "Administrador (Gerência)"])
-    st.divider()
-    st.info(f"📊 Equipamentos Totais na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
-
-# ==================================================
-# ÁREA DO PROFESSOR
-# ==================================================
-if modo_acesso == "Professor (Fazer Reserva)":
+    # 1. Logo no topo
+    if os.path.exists("logo.jpg"):
+        st.image("logo.jpg", use_container_width=True)
+    elif os.path.exists("Logo.jpg"): # Tenta com maiúscula caso o windows tenha alterado
+        st.image("Logo.jpg", use_container_width=True)
     
-    # LOGO E CABEÇALHO (Centralizado)
-    c1, c2, c3 = st.columns([1, 1, 1]) # Colunas iguais para tentar centralizar melhor
-    with c2:
-        # Tenta todas as variações de nome da logo
-        if os.path.exists("logo.jpg"):
-            st.image("logo.jpg", use_container_width=True)
-        elif os.path.exists("Logo.jpg"):
-            st.image("Logo.jpg", use_container_width=True)
-        elif os.path.exists("logo.png"):
-            st.image("logo.png", use_container_width=True)
-        else:
-            st.warning("(Logo não encontrada. Verifique se o arquivo chama 'logo.jpg')")
+    st.divider()
+    
+    # 2. Informação rápida
+    st.info(f"Equipamentos na Escola: **{QUANTIDADE_TOTAL_PROJETORES}**")
+    
+    # 3. Espaçador para empurrar o menu para baixo
+    st.write("")
+    st.write("")
+    st.write("")
+    st.markdown("---")
+    
+    # 4. MENU DE ACESSO DISCRETO (No final)
+    st.caption("Configurações do Sistema")
+    modo_acesso = st.selectbox(
+        "Alterar Modo de Visualização", 
+        ["Professor", "Administrador"], 
+        index=0  # O índice 0 garante que 'Professor' seja o padrão
+    )
 
+# ==================================================
+# ÁREA DO PROFESSOR (PADRÃO)
+# ==================================================
+if modo_acesso == "Professor":
+    
     st.markdown("<h2 style='text-align: center; color: #003366;'>Reserva de Data Show</h2>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -161,7 +165,7 @@ if modo_acesso == "Professor (Fazer Reserva)":
     else:
         pode_salvar = False
 
-    st.write("") # Espaço em branco
+    st.write("") 
     
     # BOTÃO CONFIRMAR
     if st.button("CONFIRMAR RESERVAS AGORA"):
@@ -174,7 +178,6 @@ if modo_acesso == "Professor (Fazer Reserva)":
         elif not pode_salvar:
             st.error("⚠️ Horários indisponíveis.")
         else:
-            # Salvar
             novas_reservas = []
             lista_horarios_texto = ""
             turmas_texto = ", ".join(turmas_selecionadas)
@@ -227,7 +230,7 @@ if modo_acesso == "Professor (Fazer Reserva)":
 # ==================================================
 # ÁREA DO ADMINISTRADOR
 # ==================================================
-elif modo_acesso == "Administrador (Gerência)":
+elif modo_acesso == "Administrador":
     
     st.markdown("## 🔒 Painel Administrativo")
     st.info("Área exclusiva para Coordenação.")
