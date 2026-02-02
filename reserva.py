@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import date
+from datetime import date, datetime
 import urllib.parse
 import json
 from streamlit_gsheets import GSheetsConnection
@@ -31,17 +31,11 @@ st.markdown("""
     div.stButton > button:first-child {
         background-color: #D4AF37; color: #003366; font-weight: bold; width: 100%;
     }
-    /* Classe para destacar o botão do Gilmar */
     .btn-gilmar {
-        background-color: #d9534f !important;
-        color: white !important;
-        font-size: 20px !important;
-        padding: 15px !important;
-        border-radius: 10px !important;
-        text-align: center;
-        text-decoration: none;
-        display: block;
-        margin-top: 10px;
+        background-color: #d9534f !important; color: white !important;
+        font-size: 20px !important; padding: 15px !important;
+        border-radius: 10px !important; text-align: center;
+        text-decoration: none; display: block; margin-top: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -65,7 +59,6 @@ TURMAS_ESCOLA = {
     "ENSINO FUNDAMENTAL": ["6º ANO", "7º ANO", "8º ANO", "9º ANO"],
     "ENSINO MÉDIO": ["1ª SÉRIE", "2ª SÉRIE", "3ª SÉRIE"]
 }
-# ZAPS
 ZAP_GILMAR = "5583986243832"
 ZAP_EDSON = "5583991350479"
 ZAP_LOURDINHA = "5583987104722"
@@ -73,8 +66,7 @@ ZAP_LOURDINHA = "5583987104722"
 # --- CONFIGURAÇÃO DE ESTOQUE ---
 def carregar_config_qtd():
     padrao = {"total_projetores": 3}
-    if not os.path.exists(ARQUIVO_CONFIG):
-        return padrao
+    if not os.path.exists(ARQUIVO_CONFIG): return padrao
     try:
         with open(ARQUIVO_CONFIG, "r") as f: return json.load(f)
     except: return padrao
@@ -90,23 +82,40 @@ def get_connection():
 def carregar_dados():
     conn = get_connection()
     try:
+        # Lê a planilha sem cache (ttl=0)
         df = conn.read(ttl=0)
         if df.empty or "Professor" not in df.columns:
             return pd.DataFrame(columns=["Professor", "Data", "Horario", "Nivel", "Turmas", "DataRegistro"])
-        df['Data'] = df['Data'].astype(str)
+        
+        # --- CORREÇÃO DE DATAS BLINDADA ---
+        # Converte a coluna Data para datetime e depois força para texto YYYY-MM-DD
+        # Isso resolve o problema de datas sumirem
+        df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
+        
+        # Remove linhas onde a data ficou vazia (erros de conversão)
+        df = df.dropna(subset=['Data'])
+        
         return df
-    except:
+    except Exception as e:
+        # Se der erro, mostra no log mas não quebra a tela
+        print(f"Erro ao ler banco: {e}")
         return pd.DataFrame(columns=["Professor", "Data", "Horario", "Nivel", "Turmas", "DataRegistro"])
 
 def salvar_nova_reserva(nova_linha_dict):
     conn = get_connection()
     df_atual = carregar_dados()
     novo_df = pd.DataFrame([nova_linha_dict])
+    # Garante formato correto antes de salvar
+    novo_df['Data'] = pd.to_datetime(novo_df['Data']).dt.strftime('%Y-%m-%d')
+    
     df_final = pd.concat([df_atual, novo_df], ignore_index=True)
     conn.update(data=df_final)
 
 def salvar_dataframe_completo(df):
     conn = get_connection()
+    # Garante formato antes de salvar tudo
+    if 'Data' in df.columns:
+        df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce').dt.strftime('%Y-%m-%d')
     conn.update(data=df)
 
 # --- LOGO ---
@@ -126,7 +135,6 @@ def exibir_logo():
 config = carregar_config_qtd()
 QUANTIDADE_TOTAL_PROJETORES = config.get("total_projetores", 3)
 
-# Inicializa sessão para controlar o botão do Zap
 if "reserva_sucesso" not in st.session_state:
     st.session_state.reserva_sucesso = False
 if "link_zap_cache" not in st.session_state:
@@ -139,9 +147,10 @@ with st.sidebar:
     
     df_status = carregar_dados()
     reservas_hoje = 0
+    hoje_str = date.today().strftime('%Y-%m-%d') # Formato padrão universal
+    
     if not df_status.empty and "Data" in df_status.columns:
-        hoje = str(date.today())
-        reservas_hoje = len(df_status[df_status["Data"] == hoje])
+        reservas_hoje = len(df_status[df_status["Data"] == hoje_str])
         
     st.caption("Status do Dia")
     c1, c2 = st.columns(2)
@@ -154,16 +163,13 @@ with st.sidebar:
 if modo_acesso == "Professor":
     exibir_logo()
     
-    # SE A RESERVA FOI FEITA COM SUCESSO, MOSTRA OS BOTÕES
     if st.session_state.reserva_sucesso:
         st.balloons()
-        st.success("✅ AGENDAMENTO SALVO NO SISTEMA!")
-        st.markdown("### Agora o passo mais importante: AVISE NO WHATSAPP!")
+        st.success("✅ AGENDAMENTO SALVO NO GOOGLE SHEETS!")
+        st.markdown("### Não esqueça de avisar no WhatsApp:")
         
-        # Recupera o link da memória
         link_zap = st.session_state.link_zap_cache
         
-        # Botão Gigante do Gilmar
         st.markdown(f"""
         <a href='https://wa.me/{ZAP_GILMAR}?text={link_zap}' target='_blank' style='text-decoration:none;'>
             <div style='background-color:#d9534f; color:white; padding:20px; border-radius:15px; text-align:center; font-weight:bold; font-size:22px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);'>
@@ -180,12 +186,11 @@ if modo_acesso == "Professor":
             st.markdown(f"<a href='https://wa.me/{ZAP_LOURDINHA}?text={link_zap}' target='_blank'><button style='background-color:#D4AF37; color:#003366; border:none; padding:10px; width:100%; border-radius:5px;'>Coord. Fund.</button></a>", unsafe_allow_html=True)
             
         st.divider()
-        if st.button("🔄 Fazer Outra Reserva / Voltar"):
+        if st.button("🔄 Voltar ao Início"):
             st.session_state.reserva_sucesso = False
             st.rerun()
             
     else:
-        # TELA NORMAL DE RESERVA
         st.markdown("### Agendamento de Data Show")
         st.markdown("---")
         df_reservas = carregar_dados()
@@ -195,19 +200,23 @@ if modo_acesso == "Professor":
             c1, c2 = st.columns(2)
             with c1:
                 nome_prof = st.selectbox("Professor(a)", LISTA_PROFESSORES_FIXA)
-                data_escolhida = st.date_input("Data", min_value=date.today())
+                # Data input retorna Date object
+                data_obj = st.date_input("Data", min_value=date.today())
+                # Convertemos para string YYYY-MM-DD para garantir compatibilidade
+                data_escolhida_str = data_obj.strftime('%Y-%m-%d')
+                
                 nivel = st.selectbox("Nível", list(TURMAS_ESCOLA.keys()))
             with c2:
                 horarios = st.multiselect("Horários", HORARIOS_AULA)
                 turmas = st.multiselect("Turmas", TURMAS_ESCOLA[nivel])
 
-        # Validação
         pode_salvar = False
         if horarios and turmas and nome_prof != "Selecione seu nome...":
             erros = []
             for h in horarios:
+                # Compara String com String (Formato garantido)
                 reservas_hora = df_reservas[
-                    (df_reservas["Data"] == str(data_escolhida)) & 
+                    (df_reservas["Data"] == data_escolhida_str) & 
                     (df_reservas["Horario"] == h)
                 ]
                 if len(reservas_hora) >= QUANTIDADE_TOTAL_PROJETORES:
@@ -231,28 +240,28 @@ if modo_acesso == "Professor":
                 msgs = ""
                 for h in horarios:
                     nova = {
-                        "Professor": nome_prof, "Data": str(data_escolhida),
+                        "Professor": nome_prof, "Data": data_escolhida_str,
                         "Horario": h, "Nivel": nivel,
                         "Turmas": turmas_str, "DataRegistro": str(date.today())
                     }
                     salvar_nova_reserva(nova)
                     msgs += f"\n⏰ {h}"
                 
-                texto = f"*RESERVA DATASHOW CMJP* 🏫\nProf: {nome_prof}\nData: {data_escolhida.strftime('%d/%m')}\nTurmas: {turmas_str}\n{msgs}"
+                texto = f"*RESERVA DATASHOW CMJP* 🏫\nProf: {nome_prof}\nData: {data_obj.strftime('%d/%m')}\nTurmas: {turmas_str}\n{msgs}"
                 link = urllib.parse.quote(texto)
                 
-                # SALVA NO ESTADO E RECARREGA PARA MOSTRAR OS BOTÕES
                 st.session_state.reserva_sucesso = True
                 st.session_state.link_zap_cache = link
                 st.rerun()
 
         st.divider()
-        st.subheader(f"Agenda do dia {data_escolhida.strftime('%d/%m')}")
+        st.subheader(f"Agenda do dia {data_obj.strftime('%d/%m/%Y')}")
         if not df_reservas.empty:
-            filtro = df_reservas[df_reservas["Data"] == str(data_escolhida)]
+            # Filtra usando a string formatada
+            filtro = df_reservas[df_reservas["Data"] == data_escolhida_str]
             if not filtro.empty:
                 st.dataframe(filtro[["Horario", "Turmas", "Professor"]], hide_index=True, use_container_width=True)
-            else: st.info("Livre")
+            else: st.info("Nenhuma reserva para esta data.")
 
 # ==================================================
 # ÁREA DO ADMINISTRADOR
@@ -261,8 +270,9 @@ elif modo_acesso == "Administrador":
     st.markdown("## Painel de Gestão")
     if st.text_input("Senha", type="password") == SENHA_ADMIN:
         st.success("Conectado Google Sheets")
-        tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🗑️ Editar", "⚙️ Config"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🗑️ Editar", "⚙️ Config", "📜 Histórico Completo"])
         df = carregar_dados()
+        
         with tab1:
             if not df.empty:
                 c1, c2 = st.columns(2)
@@ -274,7 +284,7 @@ elif modo_acesso == "Administrador":
                     st.plotly_chart(px.bar(contagem, x='Qtd', y='Professor', orientation='h'))
                 except: pass
         with tab2:
-            st.warning("Edição direta na Planilha")
+            st.warning("Cuidado: Alterações aqui afetam a Planilha Google.")
             df_edit = st.data_editor(df, num_rows="dynamic", use_container_width=True)
             if st.button("SALVAR NA NUVEM"):
                 salvar_dataframe_completo(df_edit)
@@ -286,3 +296,6 @@ elif modo_acesso == "Administrador":
                 salvar_config_qtd(novo_total)
                 st.success("Atualizado!")
                 st.rerun()
+        with tab4:
+            st.write("Todas as reservas registradas no sistema:")
+            st.dataframe(df, use_container_width=True)
